@@ -1,0 +1,23 @@
+---
+rooms:
+  - id: '1'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '2'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '3'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '4'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '5'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '6'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '7'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '8'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '9'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+  - id: '10'
+    rtsp: 'rtsp://192.168.0.100:8080/h264_ulaw.sdp'
+...
