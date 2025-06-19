@@ -1,114 +1,85 @@
 import cv2
 import time
-import threading
-import yaml
+import multiprocessing
 from datetime import datetime
-from yaml.loader import SafeLoader
-from analyze_room import MonitoringWorkstations
 from ultralytics import YOLO
+from analyze_room import AnalyzerRoom
 from producer import producer
-from dotenv import load_dotenv
-import os
 
 
-class Monitoring():
-    def __init__(self, rooms, topic):
-        self.model = YOLO('./yolos/yolo-m.pt')
-        self.analyzer = MonitoringWorkstations(min_conf=0.5)
-        self.producer = producer
+class Monitoring:
+    def __init__(self, rooms, topic, dev=False):
         self.rooms = rooms
         self.topic = topic
+        self.dev = dev
 
-    def _process_frame(self, frame, room_id):
-        timestamp = datetime.now().isoformat()
-
-        start = datetime.now()
-        results = self.model(frame, verbose=False)
-
-        statistics = self.analyzer.get_statistics(
-            results[0].boxes.cpu().numpy()
-        )
-
-        end = datetime.now()
-
-        print(f"[{room_id}] Обработка кадра заняла {end - start}")
-
-        data = {**statistics, 'timestamp': timestamp, 'room_id': room_id}
-
-        self.producer.send(self.topic, data)
-
-    def _read_stream(self, room):
-        id = room['id']
-        rtsp = room['rtsp']
-
-        cap = cv2.VideoCapture(rtsp)
-
-        cam_name = f'{id} - {rtsp}'
+    def _read_rtsp(self, rtsp_url, frame_queue):
+        cap = cv2.VideoCapture(rtsp_url)
 
         if not cap.isOpened():
-            print(f"[{cam_name}] Не удалось подключиться")
+            print(f"[{rtsp_url}] Не удалось открыть поток")
             return
-
-        print(f"[{cam_name}] Подключение установлено")
-
-        last = time.time()
-
-        retry = 0
-        max_retries = 5
 
         while True:
             ret, frame = cap.read()
 
-            if not ret:
-                print(f"[{cam_name}] Ошибка при чтении кадра")
+            if self.dev:
+                time.sleep(1)
 
-                if retry <= max_retries:
-                    retry += 1
+            if ret:
+                if not frame_queue.empty():
+                    try:
+                        frame_queue.get_nowait()
+                    except:
+                        pass
 
-                    print(f'retry {retry}')
+                frame_queue.put(frame)
 
-                    continue
-                else:
+    def _process_frame(self, room_id, topic, frame_queue):
+        model = YOLO('./yolos/yolo-n.pt')
+        analyzer = AnalyzerRoom(min_conf=0.5)
+        prod = producer
 
-                    print('breaking')
-                    cap.release()
-                    break
+        while True:
+            if not frame_queue.empty():
+                start = datetime.now()
+                frame = frame_queue.get()
+                timestamp = datetime.now().isoformat()
 
-            now = time.time()
+                results = model(frame, verbose=False)
+                statistics = analyzer.analyze(
+                    results[0].boxes.cpu().numpy())
 
-            if now - last >= 10:
-                self._process_frame(frame, id)
+                stop = datetime.now()
+                print(f'Processed: {room_id} - {start} - {stop - start}')
 
-                last = now
+                data = {**analyze, 'timestamp': timestamp, 'room_id': room_id}
+
+                prod.send(topic, data)
+
+            time.sleep(10)
+
+    def _monitoring(self, room):
+        rtsp = room['rtsp']
+        room_id = room['id']
+
+        frame_queue = multiprocessing.Queue(maxsize=1)
+
+        reader = multiprocessing.Process(
+            target=self._read_rtsp, args=(rtsp, frame_queue))
+        processor = multiprocessing.Process(
+            target=self._process_frame, args=(room_id, self.topic, frame_queue))
+
+        reader.start()
+        processor.start()
+
+        return [reader, processor]
 
     def start(self):
-        threads = []
-
+        processes = []
         for room in self.rooms:
-            print(rooms)
+            procs = self._monitoring(room)
+            processes.extend(procs)
 
-            t = threading.Thread(target=self._read_stream, args=(room, ))
-            t.start()
-            threads.append(t)
-
-        for t in threads:
-            t.join()
-
-
-rooms = []
-
-with open('rooms.yaml', 'r') as f:
-    data = list(yaml.load_all(f, Loader=SafeLoader))
-
-    if len(data[0]) != 0:
-        rooms = data[0]['rooms']
-    else:
-        print("Файл rooms.yaml не содержит данных")
-
-load_dotenv()
-
-topic = os.getenv("TOPIC")
-
-monitoring = Monitoring(rooms, topic)
-
-monitoring.start()
+        for p in processes:
+            p.join()

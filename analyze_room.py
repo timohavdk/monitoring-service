@@ -4,8 +4,8 @@ from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 
 
-class MonitoringWorkstations():
-    OBJECT_CLASSES = {
+class AnalyzerRoom():
+    CLASSES = {
         'work_station': 80,
         'person':       0,
     }
@@ -13,14 +13,14 @@ class MonitoringWorkstations():
     def __init__(self, min_conf: float = 0.5):
         self.min_conf = min_conf
 
-    def __get_center(self, x1: int, y1: int, x2: int, y2: int):
+    def __center(self, x1: int, y1: int, x2: int, y2: int):
         x = x1 + ((x2 - x1) / 2)
         y = y1 + ((y2 - y1) / 2)
 
         return (x, y)
 
-    def __is_person_sitting_on_work_station(self, person: np.ndarray, work_station: np.ndarray):
-        person_center = self.__get_center(
+    def __is_sitting(self, person: np.ndarray, work_station: np.ndarray):
+        person_center = self.__center(
             person[0], person[1], person[2], person[3])
 
         is_x_include = (
@@ -56,7 +56,7 @@ class MonitoringWorkstations():
     # Венгерский алгоритм
     # TODO детально изучить
 
-    def __match_groups(self, group_A, group_B):
+    def __match(self, group_A, group_B):
         A = np.array(group_A)
         B = np.array(group_B)
         m, n = len(A), len(B)
@@ -85,25 +85,25 @@ class MonitoringWorkstations():
 
         return pairs
 
-    def __get_result_object(
+    def __result(
         self,
-        count_work_stations:       int,
-        count_persons:             int,
-        count_sitting_persons:     int,
-        count_not_sitting_persons: int,
-        count_free_work_station:   int,
+        work_stations:       int,
+        persons:             int,
+        sitting_persons:     int,
+        not_sitting_persons: int,
+        free_work_station:   int,
     ):
         result = {
-            'count_work_stations':       int(count_work_stations),
-            'count_persons':             int(count_persons),
-            'count_sitting_persons':     int(count_sitting_persons),
-            'count_not_sitting_persons': int(count_not_sitting_persons),
-            'count_free_work_station':   int(count_free_work_station),
+            'work_stations':       int(work_stations),
+            'persons':             int(persons),
+            'sitting_persons':     int(sitting_persons),
+            'not_sitting_persons': int(not_sitting_persons),
+            'free_work_station':   int(free_work_station),
         }
 
         return result
 
-    def get_statistics(self, data: ultralytics.engine.results.Boxes):
+    def analyze(self, data: ultralytics.engine.results.Boxes):
         def get_filter_function(class_code: int):
             def filter_function(
                 x): return x[5] == class_code and x[4] >= self.min_conf
@@ -111,11 +111,11 @@ class MonitoringWorkstations():
             return filter_function
 
         work_station_filter_function = get_filter_function(
-            MonitoringWorkstations.OBJECT_CLASSES['work_station']
+            AnalyzerRoom.CLASSES['work_station']
         )
 
         person_filter_function = get_filter_function(
-            MonitoringWorkstations.OBJECT_CLASSES['person']
+            AnalyzerRoom.CLASSES['person']
         )
 
         all_class = data.data
@@ -124,26 +124,25 @@ class MonitoringWorkstations():
         persons = list(filter(person_filter_function, all_class))
 
         if len(work_stations) == 0:
-            return self.__get_result_object(0, len(persons), 0, len(persons), 0)
+            return self.__result(0, len(persons), 0, len(persons), 0)
         elif len(persons) == 0:
-            return self.__get_result_object(len(work_stations), 0, 0, 0, len(work_stations))
+            return self.__result(len(work_stations), 0, 0, 0, len(work_stations))
 
         work_station_centers = list(
-            map(lambda x: self.__get_center(x[0], x[1], x[2], x[3]), work_stations))
+            map(lambda x: self.__center(x[0], x[1], x[2], x[3]), work_stations))
         person_centers = list(
-            map(lambda x: self.__get_center(x[0], x[1], x[2], x[3]), persons))
+            map(lambda x: self.__center(x[0], x[1], x[2], x[3]), persons))
 
-        pairs = self.__match_groups(person_centers, work_station_centers)
+        pairs = self.__match(person_centers, work_station_centers)
 
-        count_sitting = 0
+        sitting = 0
 
         for i, j in pairs:
-            result = self.__is_person_sitting_on_work_station(
-                persons[i], work_stations[j])
+            result = self.__is_sitting(persons[i], work_stations[j])
 
-            count_sitting += result
+            sitting += result
 
-        count_not_sitting = len(persons) - count_sitting
-        count_free_work_station = len(work_stations) - count_sitting
+        not_sitting = len(persons) - sitting
+        free_work_station = len(work_stations) - sitting
 
-        return self.__get_result_object(len(work_stations), len(persons), count_sitting, count_not_sitting, count_free_work_station)
+        return self.__result(len(work_stations), len(persons), sitting, not_sitting, free_work_station)

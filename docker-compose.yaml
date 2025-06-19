@@ -25,16 +25,25 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:15
+    image: postgres:16
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5434:5432"
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
+      POSTGRES_USER: "user123"
+      POSTGRES_PASSWORD: "password123"
+      POSTGRES_DB: "monitoring"
     volumes:
       - pgdata:/var/lib/postgresql/data
+  grafana:
+    image: grafana/grafana-oss
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-storage:/var/lib/grafana
 
 volumes:
   pgdata:
+  grafana-storage:
